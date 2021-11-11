@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:esp_provisioning/src/connection_models.dart';
-
 import 'proto/dart/constants.pbenum.dart';
 import 'proto/dart/session.pb.dart';
 import 'proto/dart/wifi_config.pb.dart';
@@ -11,24 +9,24 @@ import 'security.dart';
 import 'transport.dart';
 
 class EspProv {
-  ProvTransport transport;
-  ProvSecurity security;
+  ProvTransport? transport;
+  ProvSecurity? security;
 
   EspProv({this.transport, this.security});
 
   Future<void> establishSession() async {
-    SessionData responseData;
+    SessionData? responseData;
 
-    await transport.disconnect();
+    await transport!.disconnect();
 
-    if(await transport.connect()){
-      while (await transport.checkConnect()) {
-        var request = await security.securitySession(responseData);
+    if(await transport!.connect()){
+      while (await transport!.checkConnect()) {
+        var request = await security!.securitySession(responseData);
         if (request == null) {
           return;
         }
         var response =
-            await transport.sendReceive('prov-session', request.writeToBuffer());
+            await transport!.sendReceive('prov-session', request.writeToBuffer());
         if (response.isEmpty) {
           throw Exception('Empty response');
         }
@@ -39,7 +37,7 @@ class EspProv {
   }
 
   Future<void> dispose() async {
-    return await transport.disconnect();
+    return await transport!.disconnect();
   }
 
   Future<List<WifiAP>> startScanWiFi() async {
@@ -47,7 +45,8 @@ class EspProv {
   }
 
   Future<WiFiScanPayload> startScanResponse(Uint8List data) async {
-    var respPayload = WiFiScanPayload.fromBuffer(await security.decrypt(data));
+    var byteData = await (security!.decrypt(data));
+    var respPayload = WiFiScanPayload.fromBuffer(List.from(byteData!));
     if (respPayload.msg != WiFiScanMsgType.TypeRespScanStart) {
       throw Exception('Invalid expected message type $respPayload');
     }
@@ -68,13 +67,14 @@ class EspProv {
     scanStart.groupChannels = groupChannels;
     scanStart.periodMs = periodMs;
     payload.cmdScanStart = scanStart;
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-scan', reqData);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-scan', reqData);
     return await startScanResponse(respData);
   }
 
   Future<WiFiScanPayload> scanStatusResponse(Uint8List data) async {
-    var respPayload = WiFiScanPayload.fromBuffer(await security.decrypt(data));
+    var byteData = await (security!.decrypt(data));
+    var respPayload = WiFiScanPayload.fromBuffer(List.from(byteData!));
     if (respPayload.msg != WiFiScanMsgType.TypeRespScanStatus) {
       throw Exception('Invalid expected message type $respPayload');
     }
@@ -84,8 +84,8 @@ class EspProv {
   Future<WiFiScanPayload> scanStatusRequest() async {
     WiFiScanPayload payload = WiFiScanPayload();
     payload.msg = WiFiScanMsgType.TypeCmdScanStatus;
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-scan', reqData);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-scan', reqData);
     return await scanStatusResponse(respData);
   }
 
@@ -99,13 +99,14 @@ class EspProv {
     cmdScanResult.count = count;
 
     payload.cmdScanResult = cmdScanResult;
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-scan', reqData);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-scan', reqData);
     return await scanResultResponse(respData);
   }
 
   Future<List<WifiAP>> scanResultResponse(Uint8List data) async {
-    var respPayload = WiFiScanPayload.fromBuffer(await security.decrypt(data));
+    var byteData = await (security!.decrypt(data));
+    var respPayload = WiFiScanPayload.fromBuffer(List.from(byteData!));
     if (respPayload.msg != WiFiScanMsgType.TypeRespScanResult) {
       throw Exception('Invalid expected message type $respPayload');
     }
@@ -146,7 +147,7 @@ class EspProv {
     return ret;
   }
 
-  Future<bool> sendWifiConfig({String ssid, String password}) async {
+  Future<bool> sendWifiConfig({String? ssid, String? password}) async {
     var payload = WiFiConfigPayload();
     payload.msg = WiFiConfigMsgType.TypeCmdSetConfig;
 
@@ -154,34 +155,34 @@ class EspProv {
     cmdSetConfig.ssid = utf8.encode(ssid ?? '');
     cmdSetConfig.passphrase = utf8.encode(password ?? '');
     payload.cmdSetConfig = cmdSetConfig;
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-config', reqData);
-    var respRaw = await security.decrypt(respData);
-    var respPayload = WiFiConfigPayload.fromBuffer(respRaw);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-config', reqData);
+    var respRaw = await (security!.decrypt(respData));
+    var respPayload = WiFiConfigPayload.fromBuffer(respRaw!);
     return (respPayload.respSetConfig.status == Status.Success);
   }
 
   Future<bool> applyWifiConfig() async {
     var payload = WiFiConfigPayload();
     payload.msg = WiFiConfigMsgType.TypeCmdApplyConfig;
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-config', reqData);
-    var respRaw = await security.decrypt(respData);
-    var respPayload = WiFiConfigPayload.fromBuffer(respRaw);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-config', reqData);
+    var respRaw = await (security!.decrypt(respData));
+    var respPayload = WiFiConfigPayload.fromBuffer(respRaw!);
     return (respPayload.respApplyConfig.status == Status.Success);
   }
 
-  Future<ConnectionStatus> getStatus() async {
+  Future<ConnectionStatus?> getStatus() async {
     var payload = WiFiConfigPayload();
     payload.msg = WiFiConfigMsgType.TypeCmdGetStatus;
 
     var cmdGetStatus = CmdGetStatus();
     payload.cmdGetStatus = cmdGetStatus;
 
-    var reqData = await security.encrypt(payload.writeToBuffer());
-    var respData = await transport.sendReceive('prov-config', reqData);
-    var respRaw = await security.decrypt(respData);
-    var respPayload = WiFiConfigPayload.fromBuffer(respRaw);
+    var reqData = await security!.encrypt(payload.writeToBuffer());
+    var respData = await transport!.sendReceive('prov-config', reqData);
+    var respRaw = await (security!.decrypt(respData));
+    var respPayload = WiFiConfigPayload.fromBuffer(List.from(respRaw!));
 
     if (respPayload.respGetStatus.staState.value == 0) {
       return ConnectionStatus(
@@ -213,18 +214,18 @@ class EspProv {
       {int packageSize = 256}) async {
     var i = data.length;
     var offset = 0;
-    List<int> ret = new List<int>(0);
+    List<int?> ret = [0];
     while (i > 0) {
       var needToSend = data.sublist(offset, i < packageSize ? i : packageSize);
-      var encrypted = await security.encrypt(needToSend);
-      var newData = await transport.sendReceive('custom-data', encrypted);
+      var encrypted = await security!.encrypt(needToSend);
+      var newData = await transport!.sendReceive('custom-data', encrypted);
 
       if (newData.length > 0) {
-        var decrypted = await security.decrypt(newData);
-        ret += List.from(decrypted);
+        var decrypted = await (security!.decrypt(newData));
+        ret += List.from(decrypted!);
       }
       i -= packageSize;
     }
-    return Uint8List.fromList(ret);
+    return Uint8List.fromList(ret as List<int>);
   }
 }
